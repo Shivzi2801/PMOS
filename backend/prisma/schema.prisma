@@ -1,0 +1,212 @@
+// ============================================================================
+// PMOS · Wave-0 Slice 1 · Prisma schema
+// ----------------------------------------------------------------------------
+// IMPORTANT: In PMOS, RAW SQL MIGRATIONS ARE AUTHORITATIVE, not Prisma Migrate.
+// Prisma cannot express the load-bearing parts of this slice:
+//   * UUIDv7 default (pmos.uuid_generate_v7())  -> set in SQL DEFAULT
+//   * Row-Level Security policies + FORCE RLS    -> SQL only
+//   * HASH partitioning of document_chunks       -> SQL only
+//   * the updated_at / residency-immutability triggers
+//
+// So this schema is used for the TYPED CLIENT ONLY (read/write models in the
+// later API wave). It is annotated to match the SQL exactly. Generate with:
+//     prisma generate
+// Do NOT run `prisma migrate dev` against this database -- it would try to
+// drop the partitions, policies, and triggers it does not understand. The CI
+// guard in scripts/check-no-prisma-migrate.sh enforces this.
+//
+// document_chunks is intentionally modeled WITHOUT @@id on a single column:
+// its real PK is composite (id, organization_id) because of hash partitioning.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                 String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  // organization_id is a STORED generated mirror of id in SQL; Prisma reads it
+  // but must never write it. Marked as a readable generated column.
+  organizationId     String    @map("organization_id") @db.Uuid
+  name               String
+  slug               String    @unique
+  residencyRegion    String    @default("us-east-1") @map("residency_region")
+  plan               String    @default("trial")
+  identityBindingRef String?   @map("identity_binding_ref")
+  killSwitchState    String    @default("active") @map("kill_switch_state")
+  cellId             String    @default("cell-0") @map("cell_id")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  workspaces Workspace[]
+
+  @@map("organizations")
+}
+
+model Workspace {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  slug           String
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  products     Product[]
+
+  @@unique([organizationId, slug])
+  @@map("workspaces")
+}
+
+model Product {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  name           String
+  description    String?
+  status         String    @default("active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  features  Feature[]
+
+  @@map("products")
+}
+
+model Feature {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  productId      String    @map("product_id") @db.Uuid
+  name           String
+  description    String?
+  status         String    @default("discovery")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  product Product @relation(fields: [productId], references: [id])
+  epics   Epic[]
+
+  @@map("features")
+}
+
+model Epic {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  featureId      String    @map("feature_id") @db.Uuid
+  title          String
+  description    String?
+  status         String    @default("open")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  feature     Feature     @relation(fields: [featureId], references: [id])
+  userStories UserStory[]
+
+  @@map("epics")
+}
+
+model UserStory {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  epicId         String    @map("epic_id") @db.Uuid
+  title          String
+  narrative      String?
+  status         String    @default("draft")
+  aiGenerated    Boolean   @default(false) @map("ai_generated")
+  sourceRunId    String?   @map("source_run_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  epic         Epic          @relation(fields: [epicId], references: [id])
+  requirements Requirement[]
+
+  @@map("user_stories")
+}
+
+model Requirement {
+  id             String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  userStoryId    String    @map("user_story_id") @db.Uuid
+  body           String
+  kind           String    @default("acceptance_criterion")
+  aiGenerated    Boolean   @default(false) @map("ai_generated")
+  sourceRunId    String?   @map("source_run_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  userStory UserStory @relation(fields: [userStoryId], references: [id])
+
+  @@map("requirements")
+}
+
+model Document {
+  id               String    @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  title            String
+  docType          String    @default("note") @map("doc_type")
+  currentVersionId String?   @map("current_version_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  versions DocumentVersion[] @relation("DocumentToVersions")
+
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id             String   @id @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  documentId     String   @map("document_id") @db.Uuid
+  versionNumber  Int      @map("version_number")
+  content        String
+  contentHash    String   @map("content_hash")
+  storageRef     String?  @map("storage_ref")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  document Document @relation("DocumentToVersions", fields: [documentId], references: [id])
+
+  @@unique([documentId, versionNumber])
+  @@map("document_versions")
+}
+
+/// HASH-partitioned on organization_id. Real PK is composite (id, organization_id).
+/// Prisma's @@id models the composite key; `id` is still the Qdrant point id.
+model DocumentChunk {
+  id                String    @default(dbgenerated("pmos.uuid_generate_v7()")) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  workspaceId       String    @map("workspace_id") @db.Uuid
+  documentId        String    @map("document_id") @db.Uuid
+  documentVersionId String    @map("document_version_id") @db.Uuid
+  chunkIndex        Int       @map("chunk_index")
+  content           String
+  contentHash       String    @map("content_hash")
+  readPrincipals    String[]  @map("read_principals")
+  embeddedAt        DateTime? @map("embedded_at") @db.Timestamptz(6)
+  embeddingModel    String?   @map("embedding_model")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@id([id, organizationId])
+  @@map("document_chunks")
+}
