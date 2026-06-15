@@ -1,0 +1,21 @@
+{
+  "name": "@pmos/connectors",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PMOS Wave 1 Slice 1 — F-08 Connector SDK Foundation (Zendesk reference)",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.12.12"
+  }
+}
