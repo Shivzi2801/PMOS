@@ -1,53 +1,88 @@
-"""Context Assembly layer (S1.7).
+"""S1.8 Generation layer — public API.
 
-Converts S1.6 RetrievalResult objects into model-ready PromptPackage objects.
-Pure domain layer: no LLM calls, no framework dependencies.
+Consumes the Context/Prompt Package produced by S1.7 and produces grounded,
+citation-aware answers via a provider-agnostic LLM abstraction.
 """
 
-from .citation_record import CitationRecord
-from .context_assembler import ContextAssembler
-from .context_filters import ACLFilter, DeduplicationFilter
-from .context_package import (
+from __future__ import annotations
+
+from .contracts.errors import (
+    ConfigurationError,
+    ContractViolationError,
+    GenerationError,
+    GroundingError,
+    PermanentProviderError,
+    ProviderError,
+    ProviderTimeoutError,
+    RateLimitedError,
+    TransientProviderError,
+    UnknownProviderError,
+    UnsupportedAnswerError,
+)
+from .contracts.models import (
+    AnswerStatus,
+    BoundCitation,
+    CitationRecord,
     ContextChunk,
-    ContextPackage,
-    RetrievalResult,
-    RetrievedChunk,
+    GeneratedAnswer,
+    GenerationParams,
+    LLMRequest,
+    LLMResponse,
+    PromptPackage,
+    TokenUsage,
+    new_request_id,
 )
-from .context_ranker import ContextRanker
-from .errors import (
-    CitationError,
-    ContextError,
-    EmptyContextError,
-    InvalidRetrievalResultError,
-    PromptTemplateError,
-    TokenBudgetError,
+from .observability.metrics import (
+    InMemoryMetricsSink,
+    MetricsSink,
+    NullMetricsSink,
 )
-from .metrics import AssemblyMetrics
-from .prompt_builder import GroundedQATemplate, PromptBuilder
-from .prompt_package import PromptMessage, PromptPackage
-from .token_budget import TokenBudget, heuristic_token_counter
+from .pipeline.pipeline import GenerationPipeline
+from .pipeline.retry import RetryPolicy
+from .providers.base import (
+    LLMProvider,
+    create_provider,
+    register_provider,
+    registered_providers,
+)
+
+# Importing the concrete provider modules registers them in the registry.
+from .providers import anthropic_provider as _anthropic  # noqa: F401
+from .providers import mock as _mock  # noqa: F401
+from .providers import openai_provider as _openai  # noqa: F401
 
 __all__ = [
+    "AnswerStatus",
+    "BoundCitation",
     "CitationRecord",
-    "ContextAssembler",
-    "ACLFilter",
-    "DeduplicationFilter",
     "ContextChunk",
-    "ContextPackage",
-    "RetrievalResult",
-    "RetrievedChunk",
-    "ContextRanker",
-    "CitationError",
-    "ContextError",
-    "EmptyContextError",
-    "InvalidRetrievalResultError",
-    "PromptTemplateError",
-    "TokenBudgetError",
-    "AssemblyMetrics",
-    "GroundedQATemplate",
-    "PromptBuilder",
-    "PromptMessage",
+    "GeneratedAnswer",
+    "GenerationParams",
+    "LLMRequest",
+    "LLMResponse",
     "PromptPackage",
-    "TokenBudget",
-    "heuristic_token_counter",
+    "TokenUsage",
+    "new_request_id",
+    "GenerationError",
+    "ProviderError",
+    "TransientProviderError",
+    "PermanentProviderError",
+    "ProviderTimeoutError",
+    "RateLimitedError",
+    "ConfigurationError",
+    "UnknownProviderError",
+    "ContractViolationError",
+    "GroundingError",
+    "UnsupportedAnswerError",
+    "LLMProvider",
+    "create_provider",
+    "register_provider",
+    "registered_providers",
+    "GenerationPipeline",
+    "RetryPolicy",
+    "MetricsSink",
+    "NullMetricsSink",
+    "InMemoryMetricsSink",
 ]
+
+__version__ = "1.8.0"
